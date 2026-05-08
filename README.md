@@ -1,31 +1,46 @@
 # COVID Analytics App
 
-A robust PySpark-based data analytics pipeline for processing, standardizing, and analyzing global COVID-19 datasets. The project demonstrates advanced data engineering practices and compliance with strict audit requirements.
+A robust PySpark-based data analytics pipeline for processing, standardizing, and analyzing global COVID-19 datasets. The project demonstrates advanced data engineering practices by separating the data processing layer, the orchestration layer, and the reporting layer into a clean workflow.
 
 ## Features Implemented
 
 ### Data Engineering & Standardization
-- **PySpark Pipelines:** Built scalable data pipelines using Apache Spark to ingest and process large-scale COVID-19 datasets.
-- **Data Cleansing:** Standardized text and categorical data using robust string manipulation (`regexp_replace()`) and handled missing values across multiple global datasets.
+- **PySpark Pipelines:** Built scalable data pipelines using Apache Spark to ingest and process the raw COVID-19 datasets stored in the `data` directory.
+- **Data Cleansing:** Standardized text and categorical data, handled missing values, and generated consistent summary tables for downstream use.
+- **Automated Outputs:** Exported finalized datasets into the `pipeline_output` directory for the dashboard and other consumers.
 
 ### Advanced Analytics
-- **Growth Metrics:** Calculated complex epidemiological metrics, including the death growth formula and infection rates, across different regions and timeframes.
-- **Aggregations:** Performed deep data aggregations to generate reports on day-wise, country-wise, and US county-level trends.
+- **Growth Metrics:** Calculated epidemiological metrics, including infection rates, death growth measures, recovery rates, and severity breakdowns across different regions and timeframes.
+- **Aggregations:** Performed country-wise, region-wise, and time-series aggregations to generate structured reporting tables.
+- **Scheduling:** Implemented a lightweight Python-based orchestrator that repeatedly triggers the PySpark backend on a fixed interval.
 
 ### Visualizations & Reporting
-- **Data Visualizations:** Configured clear, readable charts and graphs (handling axis labels and layouts) directly within the notebook to visualize pandemic trends.
-- **Automated Outputs:** Exported finalized data pipelines and standardized reports to the `pipeline_output` directory for downstream use.
+- **Streamlit Dashboard:** Built a readable dashboard for reviewing the processed results through KPIs, charts, and summary panels.
+- **Manual Execution Panel:** Added a dashboard control for triggering the PySpark job directly and viewing execution logs.
+- **Output Review:** Loaded processed CSV files from `pipeline_output` and rendered them without re-running Spark inside the browser session.
 
 ## Tech Stack
 - Python 3
 - Apache Spark / PySpark (Distributed Data Processing)
-- Jupyter Notebooks
-- Matplotlib / Seaborn (Visualizations)
+- Streamlit
+- pandas
+- matplotlib
+- schedule
 
-## How to Run
+## How To Run
 
-1. Ensure you have **Apache Spark** and **PySpark** installed and configured on your system.
-2. Open the `main.ipynb` Jupyter Notebook.
-3. The raw datasets are already included in the `data` directory (e.g., `covid_19_clean_complete.csv`, `usa_county_wise.csv`).
-4. Run all cells sequentially to trigger the data ingestion, execute the standardization logic, and generate the final visualization reports.
-5. Processed datasets and reports will be automatically generated in the `pipeline_output` folder.
+1. Ensure you have Python installed and activate the project virtual environment.
+2. Install dependencies from `Week12_PySpark_Requirements.txt` if needed.
+3. The raw datasets are already included in the `data` directory.
+4. Run `python orchestrator.py` to start the scheduled backend execution.
+5. Run `streamlit run app.py` to open the dashboard and review the generated reports.
+6. Use the `⚙️ Admin: Orchestration` tab if you want to trigger the backend manually.
+7. Processed datasets will be generated in the `pipeline_output` folder and reused by the dashboard.
+
+## Validation
+
+1. Run the PySpark job from the orchestrator or the dashboard.
+2. Confirm that the expected CSV files are written to `pipeline_output`.
+3. Refresh the dashboard and verify that the charts and KPI values update from the new output.
+4. Keep the orchestrator running if you want scheduled refreshes during development.
+
