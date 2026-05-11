@@ -1,0 +1,11 @@
+# Ignore the virtual environment
+venv/
+.env
+
+# Ignore the generated data outputs, but keep the folder
+pipeline_output/*
+!pipeline_output/.gitkeep
+
+# Ignore Python cache files
+__pycache__/
+*.pyc

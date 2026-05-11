@@ -2,4 +2,7 @@ pyspark
 pandas
 matplotlib
 streamlit
+schedule
+psycopg2-binary
 apache-airflow
+pyarrow
