@@ -6,3 +6,6 @@ schedule
 psycopg2-binary
 apache-airflow
 pyarrow
+boto3
+streamlit-autorefresh
+

@@ -1,55 +1,25 @@
-# COVID Analytics App
+# Serverless Real-Time COVID-19 Telemetry Pipeline 🦠
 
-A robust PySpark-based data analytics pipeline for processing, standardizing, and analyzing global COVID-19 datasets. The project demonstrates advanced data engineering practices by separating the data processing layer, the orchestration layer, and the reporting layer into a clean, cloud-ready workflow.
+This project simulates a highly scalable, real-time edge computing pipeline that ingests, processes, and visualizes live COVID-19 telemetry data from multiple concurrent sources (e.g., separate hospitals) using AWS and Docker.
 
-## Features Implemented
+## 🏗️ Architecture
 
-### Data Engineering & Standardization
-- **PySpark Pipelines:** Built scalable data pipelines using Apache Spark to ingest and process the raw COVID-19 datasets stored in the `data` directory.
-- **Data Cleansing:** Standardized text and categorical data, handled missing values, and generated consistent summary tables for downstream use.
-- **Automated Outputs:** Exported finalized datasets (CSV and Parquet) into the `pipeline_output` directory for the dashboard and other consumers.
+This is an event-driven, decoupled streaming architecture:
+1. **Edge Generation (Python/EC2):** Python scripts act as edge devices, reading data and pushing JSON payloads to AWS Kinesis.
+2. **Ingestion (AWS Kinesis):** Acts as a shock-absorbing queue to securely handle high-throughput concurrent data streams.
+3. **ETL Processing (AWS Lambda):** Event-triggered serverless functions decode Base64 payloads, enrich the data with UTC processing timestamps, and manage file writing.
+4. **Data Lake (Amazon S3):** Secure, low-cost object storage for the processed JSON records.
+5. **Visualization (Streamlit/Docker):** A containerized Python frontend that continuously polls S3 and aggregates the data in-memory using Pandas to render a live, auto-refreshing dashboard.
 
-### Advanced Analytics
-- **Growth Metrics:** Calculated epidemiological metrics, including infection rates, death growth measures, recovery rates, and severity breakdowns across different regions and timeframes.
-- **Aggregations:** Performed country-wise, region-wise, and time-series aggregations to generate structured reporting tables.
-- **Enterprise Orchestration:** Implemented Apache Airflow via Docker to schedule and monitor the pipeline, alongside a custom pure-Python fallback orchestrator (`orchestrator.py`) designed to bypass restrictive corporate endpoint firewalls.
+## 🛠️ Technology Stack
+* **Cloud Infrastructure:** AWS Kinesis, AWS Lambda, Amazon S3, AWS IAM
+* **Compute:** Ubuntu EC2, Docker Compose
+* **Data Engineering:** Python (Boto3, Pandas)
+* **Frontend:** Streamlit
 
-### Visualizations & Reporting
-- **Streamlit Dashboard:** Built a readable dashboard for reviewing the processed results through KPIs, charts, and summary panels.
-- **Manual Execution Panel:** Added a dashboard control for triggering the PySpark job directly from the UI and viewing live execution logs.
-- **Output Review:** Loaded processed files from `pipeline_output` and rendered them seamlessly without re-running Spark inside the browser session.
-
-## Tech Stack
-- Python 3
-- Apache Spark / PySpark (Distributed Data Processing)
-- Apache Airflow (Pipeline Orchestration)
-- Docker & Docker Compose (Containerization)
-- Streamlit (Frontend Dashboard)
-- pandas & pyarrow (Data Manipulation & File Export)
-- matplotlib (Data Visualization)
-
-## How To Run
-
-### Option A: Production Environment (Docker + Airflow)
-*Recommended for cloud deployments (e.g., AWS EC2) or local machines without corporate restrictions.*
-1. Ensure Docker is installed and running on your machine.
-2. Open a terminal in the project root and start the cluster: `docker-compose up -d --build`
-3. Access the Airflow UI at `http://localhost:8080` (Credentials: `admin` / `admin`).
-4. Toggle the `covid_pipeline` DAG to "Unpaused" and trigger it to process the data.
-5. Access the live Streamlit dashboard at `http://localhost:8501`.
-
-### Option B: Local Environment (Pure Python Fallback)
-*Recommended for corporate laptops with locked-down WSL/Docker access.*
-1. Ensure you have Python installed and activate your project virtual environment.
-2. Install the necessary dependencies: `pip install -r requirements.txt`
-3. Ensure the raw datasets are present in the `data` directory.
-4. Run `python orchestrator.py` to start the background scheduled execution.
-5. Open a new terminal and run `streamlit run app.py` to open the dashboard.
-6. Use the `⚙️ Admin: Orchestration` tab in the dashboard if you want to trigger the PySpark backend manually.
-
-## Validation
-
-1. Trigger the PySpark job via Airflow, the local orchestrator, or the Streamlit Admin dashboard.
-2. Confirm that the expected CSV and Parquet files are successfully written to the `pipeline_output` folder.
-3. Refresh the dashboard and verify that the charts and KPI values update from the newly generated output.
-4. Keep the orchestrator running if you want scheduled refreshes during development.
+## 📂 Repository Structure
+* `producer.py` - The data generation script simulating edge devices.
+* `lambda_function.py` - The serverless AWS ETL processor.
+* `app.py` - The Streamlit frontend visualization code.
+* `docker-compose.yml` - Infrastructure management for the UI container.
+* `requirements.txt` - Python dependencies for the Docker container.

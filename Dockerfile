@@ -3,10 +3,10 @@ FROM python:3.10-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-11-jdk-headless build-essential curl \
+    && apt-get install -y --no-install-recommends default-jre-headless build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 WORKDIR /app
 
 # Copy requirements and install

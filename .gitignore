@@ -9,3 +9,8 @@ pipeline_output/*
 # Ignore Python cache files
 __pycache__/
 *.pyc
+
+airflow.cfg
+airflow.db
+webserver_config.py
+logs/

@@ -14,14 +14,12 @@ services:
     image: apache/airflow:2.6.3
     depends_on:
       - postgres
-    user: root  # Run as root to install Java for PySpark
+    user: root
     environment:
-      # Install PySpark, Pandas, and PyArrow into the Airflow container
       - _PIP_ADDITIONAL_REQUIREMENTS=pyspark pandas pyarrow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
-    # Command to install Java BEFORE starting the webserver
     command: >
       bash -c "apt-get update && apt-get install -y default-jre-headless && su airflow -c 'airflow webserver'"
     volumes:
@@ -33,12 +31,11 @@ services:
     image: apache/airflow:2.6.3
     depends_on:
       - postgres
-    user: root  # Run as root to install Java for PySpark
+    user: root
     environment:
       - _PIP_ADDITIONAL_REQUIREMENTS=pyspark pandas pyarrow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
-    # Command to install Java BEFORE starting the scheduler
     command: >
       bash -c "apt-get update && apt-get install -y default-jre-headless && su airflow -c 'airflow scheduler'"
     volumes:
@@ -50,6 +47,10 @@ services:
       - ./:/app
     ports:
       - "8501:8501"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=ap-south-1
 
 volumes:
   postgres_db: {}

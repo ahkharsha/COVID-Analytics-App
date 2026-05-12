@@ -1,220 +1,111 @@
-import streamlit as st
+import boto3
+import json
 import pandas as pd
-import matplotlib.pyplot as plt
-import os
-import subprocess
-import sys
-import time
+import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
-# --- Page Configuration ---
-st.set_page_config(page_title="COVID-19 Live Dashboard", layout="wide", initial_sidebar_state="expanded")
+# 1. Page Configuration
+st.set_page_config(page_title="Live COVID Stream", page_icon="🦠", layout="wide")
 
-# --- Custom Styling ---
-st.markdown("""
-<style>
-    .reportview-container { background: #f0f2f6; }
-    .metric-card {
-        background-color: #ffffff;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        text-align: center;
-    }
-</style>
-""", unsafe_allow_html=True)
+# 2. Auto-Refresh (Clicks refresh every 5 seconds)
+st_autorefresh(interval=5000, key="data_refresh")
 
-OUTPUT_DIR = "pipeline_output"
+s3 = boto3.client('s3', region_name='ap-south-1')
+BUCKET_NAME = 'covid-pipeline-data-week12' 
 
-# --- Data Loading (Cached for performance) ---
-@st.cache_data
-def load_data():
+@st.cache_data(ttl=5)
+def load_live_data():
     try:
-        data = {
-            "top_cases": pd.read_csv(os.path.join(OUTPUT_DIR, "top_cases.csv")),
-            "top_deaths": pd.read_csv(os.path.join(OUTPUT_DIR, "top_deaths.csv")),
-            "who_summary": pd.read_csv(os.path.join(OUTPUT_DIR, "who_summary.csv")),
-            "daily": pd.read_csv(os.path.join(OUTPUT_DIR, "daily.csv")),
-            "death_growth": pd.read_csv(os.path.join(OUTPUT_DIR, "death_growth.csv")),
-            "monthly": pd.read_csv(os.path.join(OUTPUT_DIR, "monthly_growth.csv")),
-            "top_5_region": pd.read_csv(os.path.join(OUTPUT_DIR, "top_5_region.csv")),
-            "usa_trend": pd.read_csv(os.path.join(OUTPUT_DIR, "usa_trend.csv")),
-            "infection_rates": pd.read_csv(os.path.join(OUTPUT_DIR, "infection_rates.csv")),
-            "usa_states": pd.read_csv(os.path.join(OUTPUT_DIR, "usa_states.csv")),
-            "geo_data": pd.read_csv(os.path.join(OUTPUT_DIR, "geo_data.csv")),
-            "best_rec": pd.read_csv(os.path.join(OUTPUT_DIR, "best_rec.csv")),
-            "worst_rec": pd.read_csv(os.path.join(OUTPUT_DIR, "worst_rec.csv")),
-            "peak_dates": pd.read_csv(os.path.join(OUTPUT_DIR, "peak_dates.csv")),
-            "severity_counts": pd.read_csv(os.path.join(OUTPUT_DIR, "severity_counts.csv"))
-        }
-        return data
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix='live_data/')
+        all_records = []
+        if 'Contents' in response:
+            for item in response['Contents']:
+                obj = s3.get_object(Bucket=BUCKET_NAME, Key=item['Key'])
+                data = json.loads(obj['Body'].read().decode('utf-8'))
+                all_records.append(data)
+                
+        if all_records:
+            return pd.DataFrame(all_records)
+        return pd.DataFrame()
     except Exception as e:
-        return None
+        st.error(f"Connection Error: {e}")
+        return pd.DataFrame()
 
-dfs = load_data()
+# 3. Fetch Data
+df = load_live_data()
 
-# --- Sidebar ---
-with st.sidebar:
-    st.title("Navigation")
-    st.info("This dashboard displays the latest processed COVID-19 data.")
-    if st.button("🔄 Refresh Data"):
-        st.cache_data.clear()
-        st.rerun()
+# 4. Header
+st.title("🔴 LIVE: Global COVID-19 Telemetry")
+st.markdown("Streaming real-time data via **AWS Kinesis** & **AWS Lambda**")
+st.divider()
 
-if not dfs:
-    st.error("Data not found. Please run the orchestrator.py script first to process the data.")
-    st.stop()
+if df.empty:
+    st.warning("⏳ Waiting for live data stream... Make sure your EC2 producer script is running!")
+else:
+    # Clean the data into integers
+    for col in ['Confirmed', 'Deaths', 'Recovered']:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# --- Header KPIs ---
-st.title("COVID-19 Analytics Dashboard")
-st.markdown("---")
+    # Sort strictly by the time Lambda processed it, so the newest row is always at the bottom
+    if 'processed_at_utc' in df.columns:
+        df['processed_at_utc'] = pd.to_datetime(df['processed_at_utc'])
+        df = df.sort_values('processed_at_utc').reset_index(drop=True)
 
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-total_cases = dfs["who_summary"]["Total_Cases"].sum()
-total_deaths = dfs["who_summary"]["Total_Deaths"].sum()
-total_rec = dfs["who_summary"]["Total_Recovered"].sum()
-recovery_rate = (total_rec / total_cases) * 100
+    if 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'])
 
-kpi1.metric(label="Total Global Cases", value=f"{total_cases:,.0f}")
-kpi2.metric(label="Total Global Deaths", value=f"{total_deaths:,.0f}")
-kpi3.metric(label="Total Recoveries", value=f"{total_rec:,.0f}")
-kpi4.metric(label="Global Recovery Rate", value=f"{recovery_rate:.1f}%")
-
-st.markdown("---")
-
-# --- Dashboard Tabs ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🌍 Global Overview", 
-    "📈 Time-Series Trends", 
-    "🗺️ Geo & Infection Analysis", 
-    "🏥 Recovery & Peaks",
-    "⚙️ Admin: Orchestration"
-])
-
-with tab1:
-    st.header("Global Aggregations")
-    colA, colB, colC = st.columns(3)
-    with colA:
-        st.subheader("Top 10 Confirmed Cases")
-        st.bar_chart(dfs["top_cases"].set_index("Country/Region")["Confirmed"], use_container_width=True)
-    with colB:
-        st.subheader("Top 10 Death Rates")
-        fig, ax = plt.subplots(figsize=(5,3))
-        ax.barh(dfs["top_deaths"]["Country/Region"], dfs["top_deaths"]["Deaths / 100 Cases"], color="#FF4B4B")
-        st.pyplot(fig)
-    with colC:
-        st.subheader("Cases by WHO Region")
-        fig, ax = plt.subplots(figsize=(5,3))
-        ax.pie(dfs["who_summary"]["Total_Cases"], labels=dfs["who_summary"]["WHO Region"], autopct='%1.1f%%')
-        st.pyplot(fig)
-
-with tab2:
-    st.header("Timelines")
-    colA, colB = st.columns(2)
-    with colA:
-        st.subheader("Daily Global New Cases")
-        daily_df = dfs["daily"].copy()
-        daily_df["Date"] = pd.to_datetime(daily_df["Date"])
-        st.line_chart(daily_df.set_index("Date")["New cases"], use_container_width=True)
-    with colB:
-        st.subheader("USA Daily Case Increase")
-        usa_df = dfs["usa_trend"].copy()
-        usa_df["Date"] = pd.to_datetime(usa_df["Date"])
-        st.line_chart(usa_df.set_index("Date")["Daily_Increase"], use_container_width=True)
-
-with tab3:
-    st.header("Geographic and Severity Breakdown")
-    colA, colB = st.columns(2)
-    with colA:
-        st.subheader("Top 20 Countries by Infection Rate (%)")
-        st.bar_chart(dfs["infection_rates"].set_index("Country/Region")["Infection_Rate"], use_container_width=True)
-    with colB:
-        st.subheader("Global Severity Categories")
-        fig, ax = plt.subplots(figsize=(5,3))
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
-        ax.pie(dfs["severity_counts"]["count"], labels=dfs["severity_counts"]["Severity_Category"], autopct='%1.1f%%', colors=colors)
-        st.pyplot(fig)
-
-with tab4:
-    st.header("Recovery Performance")
-    colA, colB = st.columns(2)
-    with colA:
-        st.subheader("Top 10 Best Recovery Rates")
-        st.bar_chart(dfs["best_rec"].set_index("Country/Region")["Rec_Rate"], color="#2ca02c")
-    with colB:
-        st.subheader("Top 10 Worst Recovery Rates")
-        st.bar_chart(dfs["worst_rec"].set_index("Country/Region")["Rec_Rate"], color="#d62728")
-
-with tab5:
-    st.header("⚙️ Pipeline Orchestration & Admin")
-    st.markdown("Trigger the PySpark backend directly from the UI and view the execution logs.")
-
-    def render_last_run(run_info):
-        with st.expander(run_info["label"], expanded=True):
-            st.markdown("""
-            <div style='background-color:#1e1e1e; padding:15px; border-radius:5px; font-family:monospace; color:#00ff00;'>
-            > Waiting for manual trigger or scheduled execution... <br>
-            > Background orchestrator daemon is decoupled.<br>
-            > Output directory: <code>/pipeline_output/</code>
-            </div>
-            """, unsafe_allow_html=True)
-            st.write("Execution log")
-            if run_info["stdout"]:
-                st.code(run_info["stdout"], language="shell")
-            if run_info["stderr"]:
-                st.code(run_info["stderr"], language="shell")
+    # Get the latest row for the metrics
+    latest_row = df.iloc[-1]
     
-    col1, col2 = st.columns([1, 3])
+    # Calculate the differences for the metric arrows
+    if len(df) > 1:
+        previous_row = df.iloc[-2]
+        cases_delta = int(latest_row['Confirmed'] - previous_row['Confirmed'])
+        deaths_delta = int(latest_row['Deaths'] - previous_row['Deaths'])
+        recovered_delta = int(latest_row['Recovered'] - previous_row['Recovered'])
+    else:
+        cases_delta = deaths_delta = recovered_delta = 0
+
+    # 5. Metrics Row
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.info("System Status: **Online**")
-        run_button = st.button("🚀 Force Run Pipeline", use_container_width=True, type="primary")
-    
-    if "admin_last_run" not in st.session_state:
-        st.session_state.admin_last_run = None
-
+        st.metric(label="📡 Records Processed", value=f"{len(df):,}")
     with col2:
-        if run_button:
-            with st.status("🚀 Executing PySpark Pipeline", expanded=True) as status:
-                st.write("• Launching Spark job from the local Python environment")
-                st.write("• Initializing Spark Session and loading source CSV files")
-                st.write("• Running joins, aggregations, window functions, and exports")
-                start_time = time.time()
-                
-                # Execute the PySpark script
-                process = subprocess.run(
-                    [sys.executable, "scripts/process_covid_data.py"],
-                    capture_output=True,
-                    text=True
-                )
-                
-                duration = time.time() - start_time
-                if process.returncode == 0:
-                    st.session_state.admin_last_run = {
-                        "state": "success",
-                        "label": f"✅ Pipeline Completed Successfully in {duration:.1f}s!",
-                        "stdout": process.stdout,
-                        "stderr": process.stderr,
-                        "duration": duration,
-                    }
-                    status.update(label="✅ Pipeline completed successfully", state="complete", expanded=True)
-                    render_last_run(st.session_state.admin_last_run)
-                else:
-                    st.session_state.admin_last_run = {
-                        "state": "error",
-                        "label": f"❌ Pipeline Failed after {duration:.1f}s",
-                        "stdout": process.stdout,
-                        "stderr": process.stderr,
-                        "duration": duration,
-                    }
-                    status.update(label="❌ Pipeline failed", state="error", expanded=True)
-                    render_last_run(st.session_state.admin_last_run)
+        st.metric(label="😷 Total Confirmed", value=f"{latest_row['Confirmed']:,}", delta=cases_delta)
+    with col3:
+        st.metric(label="☠️ Total Deaths", value=f"{latest_row['Deaths']:,}", delta=deaths_delta, delta_color="inverse")
+    with col4:
+        st.metric(label="🛡️ Total Recovered", value=f"{latest_row['Recovered']:,}", delta=recovered_delta)
+
+    st.divider()
+
+    # 6. Advanced Charts Layout
+    chart_col1, chart_col2 = st.columns([2, 1])
+
+    with chart_col1:
+        st.subheader("📈 Infection Spread (Area)")
+        if 'Date' in df.columns:
+            st.area_chart(df.set_index('Date')['Confirmed'], color="#FF4B4B")
+        
+        st.subheader("⚖️ Deaths vs. Recoveries")
+        if 'Date' in df.columns:
+            comparison_df = df.set_index('Date')[['Recovered', 'Deaths']]
+            st.bar_chart(comparison_df, color=["#00C853", "#FF4B4B"])
+
+    with chart_col2:
+        st.subheader("📡 Traffic by Source")
+        if 'Source_Hospital' in df.columns:
+            # Group by hospital and count the records
+            hospital_counts = df['Source_Hospital'].value_counts()
+            st.bar_chart(hospital_counts, color="#3498db")
         else:
-            if st.session_state.admin_last_run:
-                render_last_run(st.session_state.admin_last_run)
-            else:
-                st.markdown("""
-                <div style='background-color:#1e1e1e; padding:15px; border-radius:5px; font-family:monospace; color:#00ff00;'>
-                > Waiting for manual trigger or scheduled execution... <br>
-                > Background orchestrator daemon is decoupled.<br>
-                > Output directory: <code>/pipeline_output/</code>
-                </div>
-                """, unsafe_allow_html=True)
+            st.info("Waiting for multi-source data...")
+
+        st.subheader("🏥 Live Datastream Log")
+        display_cols = ['Source_Hospital', 'Date', 'Confirmed', 'Deaths', 'Recovered']
+        actual_cols = [col for col in display_cols if col in df.columns]
+        st.dataframe(
+            df[actual_cols].tail(10).sort_index(ascending=False), 
+            use_container_width=True,
+            hide_index=True
+        )
